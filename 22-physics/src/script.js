@@ -8,6 +8,21 @@ import CANNON from 'cannon';
  * Debug
  */
 const gui = new dat.GUI()
+const debugObject = {};
+
+debugObject.createShpere = () => {
+    // console.log('create sphere');
+    createShpere(
+        Math.random() * 0.5,
+        {
+            x: (Math.random() - 0.5) * 3,
+            y: 3,
+            z: (Math.random() - 0.5) * 3
+        }
+    );
+}
+
+gui.add(debugObject, 'createShpere')
 
 /**
  * Base
@@ -145,18 +160,25 @@ renderer.setSize(sizes.width, sizes.height)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
 const objectsToUpdate = []
+
+const sphereGeometry = new THREE.SphereGeometry(1, 20, 20);
+const sphereMaterial = new THREE.MeshStandardMaterial({
+    metalness: 0.3,
+    roughness: 0.4,
+    envMap: environmentMapTexture,
+})
 /**
  * Utils
  */
 const createShpere = (radius, position) => {
+    // 因為每一個球的幾何結構和材質一樣，所以把 geometry 和 material 拉出去外面，可以有更好的效能
     const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(radius, 20, 20),
-        new THREE.MeshStandardMaterial({
-            metalness: 0.3,
-            roughness: 0.4,
-            envMap: environmentMapTexture,
-        })
+        sphereGeometry,
+        sphereMaterial
     );
+    // 再把 geometry 拉出去外面之後，半徑就必須先指定（無法在 createSphere 時才帶入）
+    // 所以這邊要再把大小依照帶入的 radius scale 回去
+    mesh.scale.set(radius, radius, radius);
     mesh.castShadow = true;
     mesh.position.copy(position);
     scene.add(mesh);
@@ -177,7 +199,7 @@ const createShpere = (radius, position) => {
     })
 }
 
-createShpere(0.5, { x: 0, y: 3, z: 0 });
+// createShpere(0.5, { x: 0, y: 3, z: 0 });
 
 /**
  * Animate
