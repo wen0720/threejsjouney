@@ -22,7 +22,38 @@ debugObject.createShpere = () => {
     );
 }
 
+debugObject.createBox = () => {
+    // console.log('create sphere');
+    createBox(
+        Math.random(),
+        Math.random(),
+        Math.random(),
+        {
+            x: (Math.random() - 0.5) * 3,
+            y: 3,
+            z: (Math.random() - 0.5) * 3
+        }
+    );
+}
+
+debugObject.reset = () => {
+    console.log('reset');
+    for (const obj of objectsToUpdate) {
+        // Remove body
+        obj.body.removeEventListener('collide', playHitSound);
+        world.removeBody(obj.body)
+
+        // Remove mesh
+        scene.remove(obj.mesh);
+    }
+
+    // Remove objectsToUpdate Array
+    objectsToUpdate.splice(0, objectsToUpdate.length);
+}
+
 gui.add(debugObject, 'createShpere')
+gui.add(debugObject, 'createBox')
+gui.add(debugObject, 'reset')
 
 /**
  * Base
@@ -32,6 +63,19 @@ const canvas = document.querySelector('canvas.webgl')
 
 // Scene
 const scene = new THREE.Scene()
+
+/**
+ * Sounds
+ */
+const hitSound = new Audio('/sounds/hit.mp3');
+const playHitSound = (collision) => {
+    const impactStrength = collision.contact.getImpactVelocityAlongNormal();
+    if (impactStrength > 1.5 /* 強度超過 1.5 才發出聲音 */) {
+        hitSound.volume = Math.random(); // 讓聲音有變化
+        hitSound.currentTime = 0;
+        hitSound.play();
+    }
+}
 
 /**
  * Textures
@@ -51,7 +95,14 @@ const environmentMapTexture = cubeTextureLoader.load([
 /**
  * Physics
  */
+// World
 const world = new CANNON.World();
+world.broadphase = new CANNON.SAPBroadphase(world); // 在 broadphase 階段使用 SAPBoradphase
+world.allowSleep = true; // 開啟 sleep，如果物體靜止不動就不要持續監測碰撞
+/**
+ sleepSpeedLimit：物體多少速度以下就會進入 sleep 狀態
+ sleepTimeLimit：似乎是多少秒符合 sleep 狀態後，就會進入 sleep 狀態
+ */
 world.gravity.set(0, -9.82, 0) // 9.82 m/s 地心引力
 
 // Materials
@@ -170,6 +221,8 @@ const sphereMaterial = new THREE.MeshStandardMaterial({
 /**
  * Utils
  */
+
+// sphere
 const createShpere = (radius, position) => {
     // 因為每一個球的幾何結構和材質一樣，所以把 geometry 和 material 拉出去外面，可以有更好的效能
     const mesh = new THREE.Mesh(
@@ -187,11 +240,12 @@ const createShpere = (radius, position) => {
     const shape = new CANNON.Sphere(radius);
     const body = new CANNON.Body({
         mass: 1,
-        position: new CANNON.Vec3(0, 3, 0),
+        position: new CANNON.Vec3(0, 3, 0), // 因為後面會在 copy position, 所以這裡隨便設一個沒關係
         shape,
         material: defaultMaterial,
     });
     body.position.copy(position)
+    body.addEventListener('collide', playHitSound);
     world.add(body);
 
     objectsToUpdate.push({
@@ -199,7 +253,40 @@ const createShpere = (radius, position) => {
     })
 }
 
+// box
+const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+const boxMaterial = new THREE.MeshStandardMaterial({
+    metalness: 0.3,
+    roughness: 0.4,
+    envMap: environmentMapTexture,
+})
+
+const createBox = (width, height, depth, position) => {
+    const mesh = new THREE.Mesh(boxGeometry, boxMaterial);
+    mesh.scale.set(width, height, depth);
+    mesh.castShadow = true;
+    mesh.position.copy(position)
+    scene.add(mesh);
+
+    // cannon.js
+    // cannonjs 的 Box 是從中心點開始計算，所以只需要帶入長寬高的一半
+    const shape = new CANNON.Box(new CANNON.Vec3(width / 2, height / 2, depth / 2));
+    const body = new CANNON.Body({
+        mass: 1,
+        // position: new CANNON.Vec3(0, 3, 0),
+        shape,
+        material: defaultMaterial,
+    })
+    body.position.copy(position);
+    body.addEventListener('collide', playHitSound);
+    world.add(body);
+    objectsToUpdate.push({
+        mesh, body
+    })
+}
+
 // createShpere(0.5, { x: 0, y: 3, z: 0 });
+// createBox(1, 1, 1, { x: 0, y: 3, z: 0 })
 
 /**
  * Animate
@@ -218,6 +305,7 @@ const tick = () =>
 
     for (const object of objectsToUpdate) {
         object.mesh.position.copy(object.body.position);
+        object.mesh.quaternion.copy(object.body.quaternion); // 讓掉落的物也會跟著物理世界的物體一起旋轉
     }
 
     // Update controls
